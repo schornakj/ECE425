@@ -1,3 +1,9 @@
+/***********
+ * Look at this wonderful header for our lab!
+ * Beth Reinert and Joe Schornak
+ * 15 December 2015
+ ***********/
+
 // Include libraries
 #include <IRremote.h>
 #include <ArduinoRobot.h>
