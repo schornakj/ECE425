@@ -42,8 +42,8 @@ IRrecv irrecv(RECV_PIN); // an instance of the IR receiver object
 decode_results results; // container for received IR codes
 
 long FrontSensorValue;
-int sensorPin = TKD1;
-int ftSonarPin = TKD1;
+int sensorPin = TK2;
+int ftSonarPin = TK2;
 int wanderCount = 0;
 int state = STATE_READY;
 int leftMotorSpeed = 0;
@@ -69,22 +69,22 @@ void setup() {
 
 void loop() {
   // put your main code here, to run repeatedly:
-//  // read analog sensor
-//  FrontSensorValue = Robot.analogRead(sensorPin);
-//  Robot.text("front sensor reading", 3, 60);
-//  Robot.debugPrint(FrontSensorValue, 5, 70);
+  //  // read analog sensor
+    FrontSensorValue = Robot.analogRead(sensorPin);
+    Robot.text("front sensor reading", 3, 60);
+    Robot.debugPrint(FrontSensorValue, 5, 70);
 
-////read digital sensor
-pinMode(ftSonarPin, OUTPUT);//set the PING pin as an output
-Robot.digitalWrite(ftSonarPin, LOW); //set the PING pin low first
-delayMicroseconds(2);//wait 2 us
-Robot.digitalWrite(ftSonarPin, HIGH);//trigger sonar by a 2 us HIGH PULSE
-delayMicroseconds(5);//wait 5 us
-Robot.digitalWrite(ftSonarPin, LOW);//set pin low first again
-pinMode(ftSonarPin, INPUT);//set pin as input with duration as reception time
-FrontSensorValue = pulseIn(ftSonarPin, HIGH); //measures how long the pin is high
-Robot.text("front sensor reading", 5, 60);
-Robot.debugPrint(FrontSensorValue, 5, 70);
+  ////read digital sensor
+//  pinMode(ftSonarPin, OUTPUT);//set the PING pin as an output
+//  Robot.digitalWrite(ftSonarPin, LOW); //set the PING pin low first
+//  delayMicroseconds(2);//wait 2 us
+//  Robot.digitalWrite(ftSonarPin, HIGH);//trigger sonar by a 2 us HIGH PULSE
+//  delayMicroseconds(5);//wait 5 us
+//  Robot.digitalWrite(ftSonarPin, LOW);//set pin low first again
+//  pinMode(ftSonarPin, INPUT);//set pin as input with duration as reception time
+//  FrontSensorValue = pulseIn(ftSonarPin, HIGH); //measures how long the pin is high
+//  Robot.text("front sensor reading", 5, 60);
+//  Robot.debugPrint(FrontSensorValue, 5, 70);
 
 
 
@@ -110,13 +110,13 @@ Robot.debugPrint(FrontSensorValue, 5, 70);
       ShyKid();
     }
     else if (state == STATE_SHY_KID_OBSTACLE) {
-
+      ShyKid();
     }
     else if (state == STATE_AGGRESSIVE_KID) {
       AggressiveKid();
     }
     else if (state == STATE_AGGRESSIVE_KID_OBSTACLE) {
-
+      AggressiveKid();
     }
     else if (state == STATE_RANDOM_WANDER) {
       RandomWander();
@@ -125,6 +125,7 @@ Robot.debugPrint(FrontSensorValue, 5, 70);
       WanderAvoid();
     }
     else if (state == STATE_WANDER_AVOID_OBSTACLE) {
+      WanderAvoid();
     }
   }
 }
@@ -196,6 +197,7 @@ void processResult() {
     case (IR_CODE_RETURN):
       leftMotorSpeed = 0;
       rightMotorSpeed = 0;
+      Robot.motorsWrite(rightMotorSpeed, leftMotorSpeed);
       state = STATE_READY;
       DisplayMenu();
       break;
@@ -213,7 +215,15 @@ void DisplayMenu() {
 }
 
 void ShyKid() {
-
+ if(state==STATE_SHY_KID){
+  leftMotorSpeed = 150;
+  rightMotorSpeed = 150;
+  Robot.motorsWrite(rightMotorSpeed, leftMotorSpeed);
+  if(front
+  
+ } else if(state==STATE_SHY_KID_OBSTACLE){
+  
+ }
 }
 
 void AggressiveKid() {
