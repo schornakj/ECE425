@@ -5,34 +5,20 @@
 #include <Wire.h>
 
 // Define the IR codes corresponding to our remote
-#define IR_CODE_VOLUME_MINUS 16580863
-#define IR_CODE_PLAY_PAUSE 16613503
-#define IR_CODE_VOLUME_PLUS 16597183
-#define IR_CODE_SETUP 16589023
-#define IR_CODE_UP 16621663
-#define IR_CODE_STOP_MODE 16605343
-#define IR_CODE_LEFT 16584943
-#define IR_CODE_ENTER_SAVE 16617583
-#define IR_CODE_RIGHT 16601263
-#define IR_CODE_TEN_PLUS 16593103
-#define IR_CODE_DOWN 16625743
+
 #define IR_CODE_RETURN 16609423
 #define IR_CODE_ONE 16582903
 #define IR_CODE_TWO 16615543
 #define IR_CODE_THREE 16599223
 #define IR_CODE_FOUR 16591063
-#define IR_CODE_FIVE 16623703
-#define IR_CODE_SIX 16607383
-#define IR_CODE_SEVEN 16586983
-#define IR_CODE_EIGHT 16619623
-#define IR_CODE_NINE 16603303
+
 
 //define states
 #define STATE_READY 0
 #define STATE_SHY_KID 1
 #define STATE_SHY_KID_OBSTACLE 2
-#define STATE_AGGRESSIVE_KID 3
-#define STATE_AGGRESSIVE_KID_OBSTACLE 4
+#define STATE_AGGRESSIVE_KID_IDLE 3
+#define STATE_AGGRESSIVE_KID_CHARGE 4
 #define STATE_RANDOM_WANDER 5
 #define STATE_WANDER_AVOID 6
 #define STATE_WANDER_AVOID_OBSTACLE 7
@@ -51,16 +37,20 @@ int rightSensorPin = TK0;
 int backSensorPin = TK6;
 int ftSonarPin = TKD1;
 int wanderCount = 0;
-int state = STATE_READY;
+int state = STATE_AGGRESSIVE_KID_IDLE;
+
 int leftMotorSpeed = 0;
 int rightMotorSpeed = 0;
+int defaultMotorSpeed = 200;
+
+
 int sensorCount = 0;
 int frontSensorDistance;
 int leftSensorDistance;
 int rightSensorDistance;
 int backSensorDistance;
-int obstacleDistance;
-
+int obstacleDistanceThreshold = 20;
+int obstacleDistanceFarThreshold = 50;
 
 void setup() {
   // put your setup code here, to run once:
@@ -85,25 +75,25 @@ void loop() {
   sensorCount = sensorCount + 1;
   if (sensorCount == 1) {
     leftSensorValue = Robot.analogRead(leftSensorPin);
-    leftSensorValue = (Robot.analogRead(leftSensorPin) + leftSensorValue)/2;
-    leftSensorValue = (Robot.analogRead(leftSensorPin) + leftSensorValue)/3;
-    leftSensorDistance = 14235*pow(leftSensorValue,-1.167);
+    //leftSensorValue = (Robot.analogRead(leftSensorPin) + leftSensorValue) / 2;
+    //leftSensorValue = (Robot.analogRead(leftSensorPin) + leftSensorValue) / 3;
+    leftSensorDistance = 14235 * pow(leftSensorValue, -1.167);
     Robot.text("left sensor reading", 3, 80);
     Robot.debugPrint(leftSensorDistance, 5, 90);
   }
   else if (sensorCount == 2) {
     rightSensorValue = Robot.analogRead(rightSensorPin);
-    rightSensorValue = (Robot.analogRead(rightSensorPin) + rightSensorValue)/2;
-    rightSensorValue = (Robot.analogRead(rightSensorPin) + rightSensorValue)/3;
-    rightSensorDistance = 14235*pow(rightSensorValue,-1.167);
+    //rightSensorValue = (Robot.analogRead(rightSensorPin) + rightSensorValue) / 2;
+    //rightSensorValue = (Robot.analogRead(rightSensorPin) + rightSensorValue) / 3;
+    rightSensorDistance = 14235 * pow(rightSensorValue, -1.167);
     Robot.text("right sensor reading", 3, 100);
     Robot.debugPrint(rightSensorDistance, 5, 110);
   }
   else if (sensorCount == 3) {
     backSensorValue = Robot.analogRead(backSensorPin);
-    backSensorValue = (Robot.analogRead(backSensorPin) + backSensorValue)/2;
-    backSensorValue = (Robot.analogRead(backSensorPin) + backSensorValue)/3;
-    backSensorDistance = 14235*pow(backSensorValue,-1.167);
+    //backSensorValue = (Robot.analogRead(backSensorPin) + backSensorValue) / 2;
+    //backSensorValue = (Robot.analogRead(backSensorPin) + backSensorValue) / 3;
+    backSensorDistance = 14235 * pow(backSensorValue, -1.167);
     Robot.text("back sensor reading", 3, 120);
     Robot.debugPrint(backSensorDistance, 5, 130);
   }
@@ -117,7 +107,7 @@ void loop() {
     Robot.digitalWrite(ftSonarPin, LOW);//set pin low first again
     pinMode(ftSonarPin, INPUT);//set pin as input with duration as reception time
     frontSensorValue = pulseIn(ftSonarPin, HIGH); //measures how long the pin is high
-    frontSensorDistance = 0.0236*frontSensorValue + 0.2049;
+    frontSensorDistance = 0.0236 * frontSensorValue + 0.2049;
     Robot.text("front sensor reading", 5, 60);
     Robot.debugPrint(frontSensorDistance, 5, 70);
     sensorCount = 0;
@@ -131,7 +121,8 @@ void loop() {
   }
 
   // close obstacle
-  if (frontSensorValue < obstacleDistance) {
+  /*
+    if (frontSensorValue < obstacleDistance) {
     if (state == STATE_SHY_KID) {
       state = STATE_SHY_KID_OBSTACLE;
     }
@@ -141,38 +132,39 @@ void loop() {
     else if (state == STATE_WANDER_AVOID) {
       state = STATE_WANDER_AVOID_OBSTACLE;
     }
+    }
+  */
+  //else {
+  if (state == STATE_SHY_KID) {
+    ShyKid();
   }
-  else {
-    if (state == STATE_SHY_KID) {
-      ShyKid();
-    }
-    else if (state == STATE_SHY_KID_OBSTACLE) {
-
-    }
-    else if (state == STATE_AGGRESSIVE_KID) {
-      AggressiveKid();
-    }
-    else if (state == STATE_AGGRESSIVE_KID_OBSTACLE) {
-
-    }
-    else if (state == STATE_RANDOM_WANDER) {
-      RandomWander();
-    }
-    else if (state == STATE_WANDER_AVOID) {
-      WanderAvoid();
-    }
-    else if (state == STATE_WANDER_AVOID_OBSTACLE) {
-    }
+  else if (state == STATE_SHY_KID_OBSTACLE) {
+    ShyKidAvoid();
   }
+  else if (state == STATE_AGGRESSIVE_KID_IDLE) {
+    AggressiveKidIdle();
+  }
+  else if (state == STATE_AGGRESSIVE_KID_CHARGE) {
+    AggressiveKidCharge();
+  }
+  else if (state == STATE_RANDOM_WANDER) {
+    RandomWander();
+  }
+  else if (state == STATE_WANDER_AVOID) {
+    WanderAvoid();
+  }
+  else if (state == STATE_WANDER_AVOID_OBSTACLE) {
+  }
+  //}
+
+  Robot.motorsWrite(rightMotorSpeed, leftMotorSpeed);
 }
 void processResult() {
   unsigned long res = results.value;
   // print the value to the screen
   //Robot.debugPrint(res, 5, 15);
   Serial.println(res, HEX);
-  if (res == IR_CODE_VOLUME_MINUS || res == IR_CODE_PLAY_PAUSE  || res == IR_CODE_VOLUME_PLUS  || res == IR_CODE_SETUP  || res == IR_CODE_UP  || res == IR_CODE_STOP_MODE  || res == IR_CODE_LEFT  || res == IR_CODE_ENTER_SAVE  || res == IR_CODE_DOWN || res == IR_CODE_RETURN  || res == IR_CODE_ONE  || res == IR_CODE_TWO  || res == IR_CODE_THREE || res == IR_CODE_FOUR  || res == IR_CODE_FIVE  || res == IR_CODE_SIX  || res == IR_CODE_SEVEN || res == IR_CODE_EIGHT  || res == IR_CODE_NINE   )
-  {
-  }
+
 
   switch (results.value) {
 
@@ -194,11 +186,11 @@ void processResult() {
       if (state == STATE_READY) {
         leftMotorSpeed = 150;
         rightMotorSpeed = 150;
-        state = STATE_AGGRESSIVE_KID;
+        state = STATE_AGGRESSIVE_KID_IDLE;
         Robot.stroke(0, 0, 0);
         Robot.background(255, 255, 255);
         Robot.text("aggressive kid", 5, 40);
-        AggressiveKid();
+        AggressiveKidIdle();
       }
       break;
 
@@ -207,7 +199,7 @@ void processResult() {
       if (state == STATE_READY) {
         leftMotorSpeed = 150;
         rightMotorSpeed = 150;
-        Robot.motorsWrite(rightMotorSpeed, leftMotorSpeed);
+        //Robot.motorsWrite(rightMotorSpeed, leftMotorSpeed);
         state = STATE_RANDOM_WANDER;
         Robot.stroke(0, 0, 0);
         Robot.background(255, 255, 255);
@@ -221,7 +213,7 @@ void processResult() {
       if (state == STATE_READY) {
         leftMotorSpeed = 150;
         rightMotorSpeed = 150;
-        Robot.motorsWrite(rightMotorSpeed, leftMotorSpeed);
+        //Robot.motorsWrite(rightMotorSpeed, leftMotorSpeed);
         state = STATE_WANDER_AVOID;
         Robot.stroke(0, 0, 0);
         Robot.background(255, 255, 255);
@@ -250,12 +242,42 @@ void DisplayMenu() {
 }
 
 void ShyKid() {
-if (state == STATE_SHY_KID){
-  if(frontSensorValue < obstacleDistance)
-}
+  if (FrontObstacleClose()) {
+    state = STATE_SHY_KID_OBSTACLE;
+  } else {
+    //Robot.motorsWrite(0, 0);
+
+    BrakeMotors();
+
+  }
+
 }
 
-void AggressiveKid() {
+void ShyKidAvoid() {
+  if (!FrontObstacleClose()) {
+    state = STATE_SHY_KID;
+  } else {
+    //Robot.motorsWrite(-defaultMotorSpeed, -defaultMotorSpeed);
+    leftMotorSpeed = -defaultMotorSpeed;
+    rightMotorSpeed = -defaultMotorSpeed;
+  }
+}
+
+void AggressiveKidIdle() {
+  if ((frontSensorDistance < obstacleDistanceFarThreshold) || (frontSensorDistance > obstacleDistanceThreshold)) {
+    state = STATE_AGGRESSIVE_KID_CHARGE;
+  }
+  BrakeMotors();
+}
+
+void AggressiveKidCharge() {
+  if ((frontSensorDistance > obstacleDistanceFarThreshold) || (frontSensorDistance < obstacleDistanceThreshold)) {
+    state = STATE_AGGRESSIVE_KID_IDLE;
+  }
+  else {
+    leftMotorSpeed = defaultMotorSpeed;
+    rightMotorSpeed = defaultMotorSpeed;
+  }
 }
 
 void RandomWander() {
@@ -264,7 +286,7 @@ void RandomWander() {
     wanderCount = 0;
     leftMotorSpeed = random(75, 225);
     rightMotorSpeed = random(75, 225);
-    Robot.motorsWrite(rightMotorSpeed, leftMotorSpeed);
+    //Robot.motorsWrite(rightMotorSpeed, leftMotorSpeed);
   }
 }
 
@@ -274,7 +296,45 @@ void WanderAvoid() {
     wanderCount = 0;
     leftMotorSpeed = random(75, 225);
     rightMotorSpeed = random(75, 225);
-    Robot.motorsWrite(rightMotorSpeed, leftMotorSpeed);
+    //Robot.motorsWrite(rightMotorSpeed, leftMotorSpeed);
+  }
+}
+
+
+bool LeftObstacleClose() {
+  if (leftSensorDistance < obstacleDistanceThreshold) {
+    return true;
+  }
+  return false;
+}
+
+bool RightObstacleClose() {
+  if (rightSensorDistance < obstacleDistanceThreshold) {
+    return true;
+  }
+  return false;
+}
+
+bool FrontObstacleClose() {
+  if (frontSensorDistance < obstacleDistanceThreshold) {
+    return true;
+  }
+  return false;
+}
+
+bool BackObstacleClose() {
+  if (backSensorDistance < obstacleDistanceThreshold) {
+    return true;
+  }
+  return false;
+}
+
+void BrakeMotors() {
+  if (leftMotorSpeed != 0 || rightMotorSpeed != 0) {
+    Robot.motorsWrite(-rightMotorSpeed, -leftMotorSpeed);
+    delay(10);
+    leftMotorSpeed = 0;
+    rightMotorSpeed = 0;
   }
 }
 
