@@ -4,12 +4,9 @@
 
 //define states
 #define STATE_READY 0
-#define STATE_SHY_KID 1
-#define STATE_SHY_KID_OBSTACLE 2
-#define STATE_AGGRESSIVE_KID_IDLE 3
-#define STATE_AGGRESSIVE_KID_CHARGE 4
-#define STATE_RANDOM_WANDER 5
-#define STATE_WANDER_AVOID 6
+#define STATE_RANDOM_WANDER 1
+#define STATE_WANDER_AVOID 2
+#define STATE_FOLLOW_WALL 3
 
 float frontSensorValue;
 float leftSensorValue;
@@ -26,7 +23,7 @@ int frontLeftSensorPin = TK3;
 
 int wanderCount = 0;
 
-int state = STATE_READY;
+int state = STATE_FOLLOW_WALL;
 
 int defaultMotorSpeed = 200;
 int leftMotorSpeed = 0;
@@ -39,14 +36,18 @@ int leftSensorDistance;
 int rightSensorDistance;
 int backSensorDistance;
 
+int targetWallDistance = 20; //cm
+int lastError;
+float timeStep = 1;
+float kP = 0.1;
+float kD = 0.1;
+float motorDifferential;
+
 int frontLeftSensorDistance;
 int frontRightSensorDistance;
 
 int obstacleDistanceThreshold = 20;
 int obstacleDistanceFarThreshold = 50;
-
-int aggressiveKidUpperThreshold = 59;
-int aggressiveKidLowerThreshold = 40;
 
 int potentialFieldAngle = 0;
 int potentialFieldMagnitude = 0;
@@ -61,14 +62,15 @@ void setup() {
   Timer1.initialize(100000);
   Timer1.attachInterrupt(UpdateMotorSpeeds);
   //Timer1.attachInterrupt(UpdateUltrasonicSensor);
+  Serial.begin(9600);
 }
 
 void loop() {
   keyPressed = Robot.keyboardRead();
   if (keyPressed == BUTTON_LEFT) {
-    state = STATE_SHY_KID;
+    //state = STATE_SHY_KID;
   } else if (keyPressed == BUTTON_DOWN) {
-    state = STATE_AGGRESSIVE_KID_CHARGE;
+    //state = STATE_AGGRESSIVE_KID_CHARGE;
   } else if (keyPressed == BUTTON_RIGHT) {
     state = STATE_RANDOM_WANDER;
   } else if (keyPressed == BUTTON_UP) {
@@ -82,32 +84,36 @@ void loop() {
 
 
   Robot.stroke(0, 0, 0);
+
   Robot.text("left sensor reading", 3, 80);
   Robot.text("right sensor reading", 3, 100);
   Robot.text("back sensor reading", 3, 120);
   Robot.text("front sensor reading", 5, 60);
+
 
   Robot.fill(255, 255, 255);
   Robot.stroke(255, 255, 255);
 
 
   ////read digital sensor
-  
-    pinMode(ftSonarPin, OUTPUT);//set the PING pin as an output
-    Robot.digitalWrite(ftSonarPin, LOW); //set the PING pin low first
-    delayMicroseconds(2);//wait 2 us
-    Robot.digitalWrite(ftSonarPin, HIGH);//trigger sonar by a 2 us HIGH PULSE
-    delayMicroseconds(5);//wait 5 us
-    Robot.digitalWrite(ftSonarPin, LOW);//set pin low first again
-    pinMode(ftSonarPin, INPUT);//set pin as input with duration as reception time
-    frontSensorValue = pulseIn(ftSonarPin, HIGH); //measures how long the pin is high
-    float frontSensorDistanceTemp = 0.0236 * frontSensorValue + 0.2049;
-    if (((int)frontSensorDistanceTemp > 0) && ((int)frontSensorDistanceTemp < 1000)) {
+
+  pinMode(ftSonarPin, OUTPUT);//set the PING pin as an output
+  Robot.digitalWrite(ftSonarPin, LOW); //set the PING pin low first
+  delayMicroseconds(2);//wait 2 us
+  Robot.digitalWrite(ftSonarPin, HIGH);//trigger sonar by a 2 us HIGH PULSE
+  delayMicroseconds(5);//wait 5 us
+  Robot.digitalWrite(ftSonarPin, LOW);//set pin low first again
+  pinMode(ftSonarPin, INPUT);//set pin as input with duration as reception time
+  frontSensorValue = pulseIn(ftSonarPin, HIGH); //measures how long the pin is high
+  float frontSensorDistanceTemp = 0.0236 * frontSensorValue + 0.2049;
+  if (((int)frontSensorDistanceTemp > 0) && ((int)frontSensorDistanceTemp < 1000)) {
     frontSensorDistance = min(frontSensorDistanceTemp, 60);
-    }
-  
+  }
+
 
   Robot.rect(0, 70, 100, 10);
+
+  Robot.debugPrint(motorDifferential, 50, 70);
 
   Robot.debugPrint(frontSensorDistance, 5, 70);
 
@@ -140,25 +146,8 @@ void loop() {
   Robot.debugPrint(potentialFieldAngle, 50, 140);
 
   Robot.rect(0, 0, 150, 10);
-  if (state == STATE_SHY_KID) {
 
-    Robot.text("STATE: SHY KID", 5, 0);
-    ShyKid();
-  }
-  else if (state == STATE_SHY_KID_OBSTACLE) {
-    Robot.text("STATE: SHY KID (RUN AWAY!)", 5, 0);
-    ShyKidAvoid();
-  }
-  else if (state == STATE_AGGRESSIVE_KID_IDLE) {
-    Robot.text("STATE: AGGRO KID (IDLE)", 5, 0);
-    //AggressiveKidIdle();
-  }
-  else if (state == STATE_AGGRESSIVE_KID_CHARGE) {
-    Robot.text("STATE: AGGRO KID (CHARGE!)", 5, 0);
-    //AggressiveKidCharge();
-  }
-
-  else if (state == STATE_RANDOM_WANDER) {
+  if (state == STATE_RANDOM_WANDER) {
     Robot.text("STATE: RANDOM_WANDR", 5, 0);
     RandomWander();
 
@@ -171,68 +160,24 @@ void loop() {
     Robot.text("STATE: READY", 5, 0);
     leftMotorSpeed = 0;
     rightMotorSpeed = 0;
+  } else if (state == STATE_FOLLOW_WALL) {
+    Robot.text("STATE: FOLLOW WALL", 5, 0);
+    FollowWall();
   }
 
   Robot.motorsWrite(rightMotorSpeed, leftMotorSpeed);
 }
 
 void DisplayMenu() {
-  Robot.stroke(0, 0, 0);
-  Robot.background(255, 255, 255);
-  Robot.text("<: shy kid", 5, 10);
-  Robot.text("v: aggressive kid", 5, 20);
-  Robot.text(">: random wander", 5, 30);
-  Robot.text("^: wander and avoid", 5, 40);
-  //Robot.text("center: return", 5, 40);
-}
-
-void ShyKid() {
-  if (potentialFieldMagnitude > 30) {
-    state = STATE_SHY_KID_OBSTACLE;
-  } else {
-    Robot.motorsWrite(0, 0);
-  }
-
-}
-
-void ShyKidAvoid() {
-  if (potentialFieldMagnitude < 30) {
-    state = STATE_SHY_KID;
-  } else {
-    //Robot.motorsWrite(-defaultMotorSpeed, -defaultMotorSpeed);
-    //leftMotorSpeed = -defaultMotorSpeed;
-    //rightMotorSpeed = -defaultMotorSpeed;
-    DriveInputAngle(potentialFieldAngle);
-    Robot.motorsWrite(defaultMotorSpeed, defaultMotorSpeed);
-    delay(500);
-    Robot.motorsWrite(0, 0);
-  }
-}
-
-void AggressiveKidIdle() {
-  //if ((frontSensorDistance > aggressiveKidLowerThreshold) && (frontSensorDistance < aggressiveKidUpperThreshold)) {
-  if (frontSensorDistance > aggressiveKidLowerThreshold) {
-    state = STATE_AGGRESSIVE_KID_CHARGE;
-  } else {
-    //Robot.motorsWrite(0, 0);
-    leftMotorSpeed = 0;
-    rightMotorSpeed = 0;
-  }
-}
-
-void AggressiveKidCharge() {
-  //if ((frontSensorDistance < aggressiveKidLowerThreshold) || (frontSensorDistance > aggressiveKidUpperThreshold)) {
-  if (frontSensorDistance < aggressiveKidLowerThreshold) {
-    state = STATE_AGGRESSIVE_KID_IDLE;
-    Robot.motorsWrite(-200, -200);
-    delay(250);
-    Robot.motorsWrite(0, 0);
-  }
-  else {
-    leftMotorSpeed = defaultMotorSpeed;
-    rightMotorSpeed = defaultMotorSpeed;
-    //Robot.motorsWrite(defaultMotorSpeed, defaultMotorSpeed);
-  }
+  /*
+    Robot.stroke(0, 0, 0);
+    Robot.background(255, 255, 255);
+    Robot.text("<: shy kid", 5, 10);
+    Robot.text("v: aggressive kid", 5, 20);
+    Robot.text(">: random wander", 5, 30);
+    Robot.text("^: wander and avoid", 5, 40);
+    //Robot.text("center: return", 5, 40);
+  */
 }
 
 void RandomWander() {
@@ -282,6 +227,26 @@ void WanderAvoid() {
   RandomWander();
 }
 
+void FollowWall() {
+  int currentError = leftSensorDistance - targetWallDistance;
+  motorDifferential = PDController(leftSensorDistance - targetWallDistance, lastError, timeStep);
+  Serial.println(motorDifferential);
+  //int leftMotorValue;
+  //int rightMotorValue;
+
+  if (motorDifferential > 0) {
+    rightMotorSpeed = defaultMotorSpeed;
+    leftMotorSpeed = defaultMotorSpeed / (1 + abs(motorDifferential));
+
+  } else {
+    leftMotorSpeed = defaultMotorSpeed;
+    rightMotorSpeed = defaultMotorSpeed / (1 + abs(motorDifferential));
+  }
+
+  
+  lastError = currentError;
+}
+
 bool FrontObstacleClose() {
   if (frontSensorDistance < obstacleDistanceThreshold) {
     return true;
@@ -293,33 +258,13 @@ float IRSensorLinearize(int input) {
   return 14235 * pow(input, -1.167);
 }
 
-void UpdateMotorSpeeds() {
-  if (state == STATE_AGGRESSIVE_KID_IDLE) {
-    AggressiveKidIdle();
-    Robot.motorsWrite(rightMotorSpeed, leftMotorSpeed);
-  }
-  else if (state == STATE_AGGRESSIVE_KID_CHARGE)
-  {
-    AggressiveKidCharge();
-    Robot.motorsWrite(rightMotorSpeed, leftMotorSpeed);
-  }
+float PDController(int error, int lastError, int timeStep) {
+  return kP * error + kD * (error - lastError) / timeStep;
 }
 
-/*
-void UpdateUltrasonicSensor() {
-  pinMode(ftSonarPin, OUTPUT);//set the PING pin as an output
-  Robot.digitalWrite(ftSonarPin, LOW); //set the PING pin low first
-  delayMicroseconds(2);//wait 2 us
-  Robot.digitalWrite(ftSonarPin, HIGH);//trigger sonar by a 2 us HIGH PULSE
-  delayMicroseconds(5);//wait 5 us
-  Robot.digitalWrite(ftSonarPin, LOW);//set pin low first again
-  pinMode(ftSonarPin, INPUT);//set pin as input with duration as reception time
-  frontSensorValue = pulseIn(ftSonarPin, HIGH); //measures how long the pin is high
-  float frontSensorDistanceTemp = 0.0236 * frontSensorValue + 0.2049;
-  if (((int)frontSensorDistanceTemp > 0) && ((int)frontSensorDistanceTemp < 1000)) {
-    frontSensorDistance = min(frontSensorDistanceTemp, 60);
-  }
+void UpdateMotorSpeeds() {
+
 }
-*/
+
 
 
