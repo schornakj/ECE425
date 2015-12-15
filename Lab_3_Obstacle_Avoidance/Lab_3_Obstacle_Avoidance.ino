@@ -1,5 +1,6 @@
 #include <ArduinoRobot.h>
 #include <Wire.h>
+#include <TimerOne.h>
 
 //define states
 #define STATE_READY 0
@@ -44,6 +45,9 @@ int frontRightSensorDistance;
 int obstacleDistanceThreshold = 20;
 int obstacleDistanceFarThreshold = 50;
 
+int aggressiveKidUpperThreshold = 59;
+int aggressiveKidLowerThreshold = 30;
+
 int potentialFieldAngle = 0;
 int potentialFieldMagnitude = 0;
 int potentialFieldThreshold = 40;
@@ -54,6 +58,8 @@ void setup() {
   Robot.begin();
   Robot.beginTFT();
   DisplayMenu();
+  Timer1.initialize(100000);
+  Timer1.attachInterrupt(UpdateMotorSpeeds);
 }
 
 void loop() {
@@ -117,14 +123,14 @@ void loop() {
 
   frontLeftSensorDistance = min(IRSensorLinearize(Robot.analogRead(frontLeftSensorPin)), 60);
   //Robot.rect(0, 130, 100, 10);
-  Robot.debugPrint(backSensorDistance, 50, 90);
+  Robot.debugPrint(frontLeftSensorDistance, 50, 90);
 
-  frontLeftSensorDistance = min(IRSensorLinearize(Robot.analogRead(frontRightSensorPin)), 60);
+  frontRightSensorDistance = min(IRSensorLinearize(Robot.analogRead(frontRightSensorPin)), 60);
   //Robot.rect(0, 130, 100, 10);
-  Robot.debugPrint(backSensorDistance, 50, 110);
+  Robot.debugPrint(frontRightSensorDistance, 50, 110);
 
-  potentialFieldMagnitude = sqrt(pow(leftSensorDistance + frontLeftSensorDistance*cos(PI/4) - rightSensorDistance - frontRightSensorDistance*cos(PI/4), 2) + pow(frontSensorDistance + frontLeftSensorDistance*sin(PI/4) - backSensorDistance - frontRightSensorDistance*sin(PI/4), 2));
-  potentialFieldAngle = atan2(leftSensorDistance + frontLeftSensorDistance*cos(PI/4) - rightSensorDistance - frontRightSensorDistance*cos(PI/4), frontSensorDistance + frontLeftSensorDistance*sin(PI/4) - backSensorDistance - frontRightSensorDistance*sin(PI/4)) * 360 / (2 * PI);
+  potentialFieldMagnitude = sqrt(pow(leftSensorDistance + frontLeftSensorDistance * cos(PI / 4) - rightSensorDistance - frontRightSensorDistance * cos(PI / 4), 2) + pow(frontSensorDistance + frontLeftSensorDistance * sin(PI / 4) - backSensorDistance - frontRightSensorDistance * sin(PI / 4), 2));
+  potentialFieldAngle = atan2(leftSensorDistance + frontLeftSensorDistance * cos(PI / 4) - rightSensorDistance - frontRightSensorDistance * cos(PI / 4), frontSensorDistance + frontLeftSensorDistance * sin(PI / 4) - backSensorDistance - frontRightSensorDistance * sin(PI / 4)) * 360 / (2 * PI);
 
   Robot.rect(0, 140, 100, 10);
   Robot.debugPrint(potentialFieldMagnitude, 5, 140);
@@ -142,11 +148,11 @@ void loop() {
   }
   else if (state == STATE_AGGRESSIVE_KID_IDLE) {
     Robot.text("STATE: AGGRO KID", 5, 0);
-    AggressiveKidIdle();
+    //AggressiveKidIdle();
   }
   else if (state == STATE_AGGRESSIVE_KID_CHARGE) {
     Robot.text("STATE: AGGRO KID (CHARGE!)", 5, 0);
-    AggressiveKidCharge();
+    //AggressiveKidCharge();
   }
 
   else if (state == STATE_RANDOM_WANDER) {
@@ -160,7 +166,11 @@ void loop() {
     WanderAvoid();
   } else if (state == STATE_READY) {
     Robot.text("STATE: READY", 5, 0);
+    leftMotorSpeed = 0;
+    rightMotorSpeed = 0;
   }
+
+  Robot.motorsWrite(rightMotorSpeed, leftMotorSpeed);
 }
 
 void DisplayMenu() {
@@ -197,38 +207,46 @@ void ShyKidAvoid() {
 }
 
 void AggressiveKidIdle() {
-  if ((frontSensorDistance < obstacleDistanceFarThreshold) || (frontSensorDistance > obstacleDistanceThreshold)) {
+  if ((frontSensorDistance > aggressiveKidLowerThreshold) && (frontSensorDistance < aggressiveKidUpperThreshold)) {
     state = STATE_AGGRESSIVE_KID_CHARGE;
+  } else {
+    //Robot.motorsWrite(0, 0);
+    leftMotorSpeed = 0;
+    rightMotorSpeed = 0;
   }
-  Robot.motorsWrite(0, 0);
 }
 
 void AggressiveKidCharge() {
-  if ((frontSensorDistance > obstacleDistanceFarThreshold) || (frontSensorDistance < obstacleDistanceThreshold)) {
+  if ((frontSensorDistance < aggressiveKidLowerThreshold) || (frontSensorDistance > aggressiveKidUpperThreshold)) {
     state = STATE_AGGRESSIVE_KID_IDLE;
   }
   else {
-    //leftMotorSpeed = defaultMotorSpeed;
-    //rightMotorSpeed = defaultMotorSpeed;
-    Robot.motorsWrite(defaultMotorSpeed, defaultMotorSpeed);
+    leftMotorSpeed = defaultMotorSpeed / 2;
+    rightMotorSpeed = defaultMotorSpeed / 2;
+    //Robot.motorsWrite(defaultMotorSpeed, defaultMotorSpeed);
   }
 }
 
 void RandomWander() {
-  wanderCount++;
-  if (wanderCount > 10) {
-    wanderCount = 0;
-    int leftValue = random(75, 200);
-    int rightValue = random(75, 200);
+  wanderCount = wanderCount % 10;
 
-    if (rightValue < leftValue) {
-      leftValue = 200;
-    } else {
-      rightValue = 200;
-    }
-    Robot.motorsWrite(rightValue, leftValue);
-    delay(250);
+  //if (wanderCount == 0) {
+
+  leftMotorSpeed = random(75, 200);
+  rightMotorSpeed = random(75, 200);
+
+  if (rightMotorSpeed < leftMotorSpeed) {
+    leftMotorSpeed = 200;
+  } else {
+    rightMotorSpeed = 200;
   }
+  //}
+
+
+  //Robot.motorsWrite(defaultMotorSpeed, defaultMotorSpeed);
+  //delay(350);
+  //Robot.motorsWrite(0, 0);
+  //wanderCount++;
 }
 void DriveInputAngle(int inputAngle) {
   if (inputAngle > 0) {
@@ -248,7 +266,7 @@ void DriveInputAngle(int inputAngle) {
 
 void WanderAvoid() {
   // If there is an obstacle too close, take evasive action.
-  if (potentialFieldMagnitude < 75) {
+  if (potentialFieldMagnitude > 30) {
     DriveInputAngle(potentialFieldAngle);
     delay(250);
   }
@@ -265,6 +283,18 @@ bool FrontObstacleClose() {
 
 float IRSensorLinearize(int input) {
   return 14235 * pow(input, -1.167);
+}
+
+void UpdateMotorSpeeds() {
+  if (state == STATE_AGGRESSIVE_KID_IDLE) {
+    AggressiveKidIdle();
+    Robot.motorsWrite(rightMotorSpeed, leftMotorSpeed);
+  }
+  else if (state == STATE_AGGRESSIVE_KID_CHARGE)
+  {
+    AggressiveKidCharge();
+    Robot.motorsWrite(rightMotorSpeed, leftMotorSpeed);
+  }
 }
 
 
