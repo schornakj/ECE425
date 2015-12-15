@@ -33,8 +33,6 @@ int rightMotorSpeed = 0;
 
 float spinDegreesPerMilisecond = (168 / 90) * 0.325;
 
-int sensorCount = 0;
-
 float frontSensorDistance;
 int leftSensorDistance;
 int rightSensorDistance;
@@ -55,7 +53,6 @@ int keyPressed;
 void setup() {
   Robot.begin();
   Robot.beginTFT();
-  Robot.beginSD();
   DisplayMenu();
 }
 
@@ -126,8 +123,8 @@ void loop() {
   //Robot.rect(0, 130, 100, 10);
   Robot.debugPrint(backSensorDistance, 50, 110);
 
-  potentialFieldMagnitude = sqrt(pow(leftSensorDistance - rightSensorDistance, 2) + pow(frontSensorDistance - backSensorDistance, 2));
-  potentialFieldAngle = atan2(leftSensorDistance - rightSensorDistance, frontSensorDistance - backSensorDistance) * 360 / (2 * PI);
+  potentialFieldMagnitude = sqrt(pow(leftSensorDistance + frontLeftSensorDistance*cos(PI/4) - rightSensorDistance - frontRightSensorDistance*cos(PI/4), 2) + pow(frontSensorDistance + frontLeftSensorDistance*sin(PI/4) - backSensorDistance - frontRightSensorDistance*sin(PI/4), 2));
+  potentialFieldAngle = atan2(leftSensorDistance + frontLeftSensorDistance*cos(PI/4) - rightSensorDistance - frontRightSensorDistance*cos(PI/4), frontSensorDistance + frontLeftSensorDistance*sin(PI/4) - backSensorDistance - frontRightSensorDistance*sin(PI/4)) * 360 / (2 * PI);
 
   Robot.rect(0, 140, 100, 10);
   Robot.debugPrint(potentialFieldMagnitude, 5, 140);
