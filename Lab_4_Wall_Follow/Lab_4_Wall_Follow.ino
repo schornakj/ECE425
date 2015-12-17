@@ -25,22 +25,25 @@ int wanderCount = 0;
 
 int state = STATE_FOLLOW_WALL;
 
-int defaultMotorSpeed = 200;
+int defaultMotorSpeed = 150;
 int leftMotorSpeed = 0;
 int rightMotorSpeed = 0;
 
 float spinDegreesPerMilisecond = (168 / 90) * 0.325;
 
-float frontSensorDistance;
+int frontSensorDistance;
 int leftSensorDistance;
 int rightSensorDistance;
 int backSensorDistance;
 
 int targetWallDistance = 20; //cm
 int lastError;
-float timeStep = 1;
+
+int startTime;
+int lastTime;
+int timeStep = 1;
 float kP = 0.1;
-float kD = 0.1;
+float kD = 100;
 float motorDifferential;
 
 int frontLeftSensorDistance;
@@ -55,14 +58,18 @@ int potentialFieldThreshold = 40;
 
 int keyPressed;
 
+
+
 void setup() {
   Robot.begin();
   Robot.beginTFT();
-  DisplayMenu();
-  Timer1.initialize(100000);
+  //DisplayMenu();
+  Timer1.initialize(250000);
   Timer1.attachInterrupt(UpdateMotorSpeeds);
-  //Timer1.attachInterrupt(UpdateUltrasonicSensor);
-  Serial.begin(9600);
+  Timer1.attachInterrupt(FollowWall);
+  //Serial.begin(9600);
+  startTime = millis();
+  lastTime = startTime;
 }
 
 void loop() {
@@ -84,11 +91,12 @@ void loop() {
 
 
   Robot.stroke(0, 0, 0);
-
-  Robot.text("left sensor reading", 3, 80);
-  Robot.text("right sensor reading", 3, 100);
-  Robot.text("back sensor reading", 3, 120);
-  Robot.text("front sensor reading", 5, 60);
+  /*
+    Robot.text("left sensor reading", 3, 80);
+    Robot.text("right sensor reading", 3, 100);
+    Robot.text("back sensor reading", 3, 120);
+    Robot.text("front sensor reading", 5, 60);
+  */
 
 
   Robot.fill(255, 255, 255);
@@ -162,23 +170,25 @@ void loop() {
     rightMotorSpeed = 0;
   } else if (state == STATE_FOLLOW_WALL) {
     Robot.text("STATE: FOLLOW WALL", 5, 0);
-    FollowWall();
+    //FollowWall();
   }
 
   Robot.motorsWrite(rightMotorSpeed, leftMotorSpeed);
+  delay(250);
+  Robot.motorsWrite(0,0);
 }
 
-void DisplayMenu() {
-  /*
-    Robot.stroke(0, 0, 0);
-    Robot.background(255, 255, 255);
-    Robot.text("<: shy kid", 5, 10);
-    Robot.text("v: aggressive kid", 5, 20);
-    Robot.text(">: random wander", 5, 30);
-    Robot.text("^: wander and avoid", 5, 40);
-    //Robot.text("center: return", 5, 40);
-  */
-}
+//void DisplayMenu() {
+/*
+  Robot.stroke(0, 0, 0);
+  Robot.background(255, 255, 255);
+  Robot.text("<: shy kid", 5, 10);
+  Robot.text("v: aggressive kid", 5, 20);
+  Robot.text(">: random wander", 5, 30);
+  Robot.text("^: wander and avoid", 5, 40);
+  //Robot.text("center: return", 5, 40);
+*/
+//}
 
 void RandomWander() {
   wanderCount = wanderCount % 10;
@@ -228,23 +238,38 @@ void WanderAvoid() {
 }
 
 void FollowWall() {
-  int currentError = leftSensorDistance - targetWallDistance;
-  motorDifferential = PDController(leftSensorDistance - targetWallDistance, lastError, timeStep);
-  Serial.println(motorDifferential);
-  //int leftMotorValue;
-  //int rightMotorValue;
+  //Robot.rect(0, 90, 100, 10);
+  //Robot.debugPrint(leftSensorDistance, 5, 90);
+  if (state == STATE_FOLLOW_WALL) {
+    int distanceToWall = min(min(leftSensorDistance, frontLeftSensorDistance), frontSensorDistance);
+    int currentError = distanceToWall - targetWallDistance;
+    if (abs(currentError) < 3) {
+      currentError = 0;
+    }
+    int currentTime = millis();
+    timeStep = currentTime - lastTime;
+    //Robot.debugPrint(timeStep, 5,15);
 
-  if (motorDifferential > 0) {
-    rightMotorSpeed = defaultMotorSpeed;
-    leftMotorSpeed = defaultMotorSpeed / (1 + abs(motorDifferential));
+    motorDifferential = PDController(currentError, lastError, timeStep);
+    //Serial.println(motorDifferential);
+    //int leftMotorValue;
+    //int rightMotorValue;
 
-  } else {
-    leftMotorSpeed = defaultMotorSpeed;
-    rightMotorSpeed = defaultMotorSpeed / (1 + abs(motorDifferential));
+    if (motorDifferential > 0) {
+      rightMotorSpeed = defaultMotorSpeed;
+      leftMotorSpeed = max(defaultMotorSpeed / (1 + abs(motorDifferential)), defaultMotorSpeed * 0.5);
+
+    } else {
+      leftMotorSpeed = defaultMotorSpeed;
+      rightMotorSpeed = max(defaultMotorSpeed / (1 + abs(motorDifferential)), defaultMotorSpeed * 0.5);
+    }
+
+    lastTime = currentTime;
+    lastError = currentError;
+    Serial.print("Error: ");
+    Serial.println(currentError);
+    Serial.println(motorDifferential);
   }
-
-  
-  lastError = currentError;
 }
 
 bool FrontObstacleClose() {
@@ -259,12 +284,12 @@ float IRSensorLinearize(int input) {
 }
 
 float PDController(int error, int lastError, int timeStep) {
-  return kP * error + kD * (error - lastError) / timeStep;
+  //return kP * error + kD * (error - lastError) / timeStep;
+  return kP * error;
 }
 
 void UpdateMotorSpeeds() {
-
+  Robot.motorsWrite(rightMotorSpeed, leftMotorSpeed);
 }
-
 
 
